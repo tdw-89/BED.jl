@@ -85,6 +85,80 @@ end
         @test string(record) == "chrX\t151080532\t151081699\tCHOCOLATE1\t0\t-\t151080532\t151081699\t255,127,36"
     end
 
+    @testset "narrowPeak" begin
+        # Test reading narrowPeak format
+        record = BED.Record("2\t40606066\t40606335\trep1_peak_15939\t39\t.\t2.56459\t3.93239\t2.06428\t147")
+        @test BED.chrom(record) == "2"
+        @test BED.chromstart(record) === 40606067
+        @test BED.chromend(record) === 40606335
+        @test BED.name(record) == "rep1_peak_15939"
+        @test BED.score(record) === 39
+        @test BED.strand(record) === STRAND_BOTH
+        @test BED.hassignalvalue(record)
+        @test BED.signalvalue(record) ≈ 2.56459
+        @test BED.haspvalue(record)
+        @test BED.pvalue(record) ≈ 3.93239
+        @test BED.hasqvalue(record)
+        @test BED.qvalue(record) ≈ 2.06428
+        @test BED.haspeak(record)
+        @test BED.peak(record) === 147
+        @test !BED.hasblockcount(record) || BED.blockcount(record) === 147  # Column 10 can be interpreted as both
+        @test !BED.hasblocksizes(record)
+        @test !BED.hasblockstarts(record)
+        @test startswith(repr(record), "BED.Record:\n")
+
+        # Test with integer values in narrowPeak columns (no decimal point)
+        record2 = BED.Record("9\t5227040\t5228258\trep1_peak_36458\t80\t.\t3\t8\t6\t468")
+        @test BED.signalvalue(record2) ≈ 3.0
+        @test BED.pvalue(record2) ≈ 8.0
+        @test BED.qvalue(record2) ≈ 6.0
+        @test BED.peak(record2) === 468
+
+        # Test with zero values
+        record3 = BED.Record("24\t12238164\t12238361\trep1_peak_22385\t16\t.\t1.75658\t1.65744\t0\t67")
+        @test BED.qvalue(record3) ≈ 0.0
+        @test BED.peak(record3) === 67
+
+        # Test reading from file
+        narrowpeak_file = joinpath(@__DIR__, "test.narrowPeak")
+        records = collect(open(BED.Reader, narrowpeak_file))
+        @test length(records) == 10
+        
+        # Test first record from file
+        @test BED.chrom(records[1]) == "2"
+        @test BED.chromstart(records[1]) === 40606067
+        @test BED.chromend(records[1]) === 40606335
+        @test BED.name(records[1]) == "rep1_peak_15939"
+        @test BED.score(records[1]) === 39
+        @test BED.signalvalue(records[1]) ≈ 2.56459
+        @test BED.pvalue(records[1]) ≈ 3.93239
+        @test BED.qvalue(records[1]) ≈ 2.06428
+        @test BED.peak(records[1]) === 147
+
+        # Test fifth record (highest values)
+        @test BED.chrom(records[5]) == "24"
+        @test BED.chromstart(records[5]) === 17259863
+        @test BED.chromend(records[5]) === 17263400
+        @test BED.score(records[5]) === 1627
+        @test BED.signalvalue(records[5]) ≈ 22.3227
+        @test BED.pvalue(records[5]) ≈ 162.777
+        @test BED.qvalue(records[5]) ≈ 159.952
+        @test BED.peak(records[5]) === 854
+
+        # Test round-trip (write and read back)
+        output = IOBuffer()
+        writer = BED.Writer(output)
+        for record in records
+            write(writer, record)
+        end
+        flush(writer)
+        
+        seekstart(output)
+        records_read = collect(BED.Reader(output))
+        @test length(records_read) == 10
+        @test records == records_read
+    end
+
     function check_bed_parse(filename)
         # Reading from a stream
         for interval in BED.Reader(open(filename))

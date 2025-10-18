@@ -95,13 +95,23 @@ const record_machine, file_machine = let
         name = onexit!(onenter!(re"[ -~]*", :pos), :record_name)
         score = onexit!(onenter!(re"[0-9]+", :pos), :record_score)
         strand = onenter!(re"[+\-.?]", :record_strand) #Note: single byte.
-        thickstart = onexit!(onenter!(re"[0-9]+", :pos), :record_thickstart)
-        thickend = onexit!(onenter!(re"[0-9]+", :pos), :record_thickend)
-        itemrgb = cat(re"[0-9]+", opt(cat(',', re"[0-9]+", ',', re"[0-9]+")))
-        onexit!(onenter!(itemrgb, :pos), :record_itemrgb)
-        blockcount = onexit!(onenter!(re"[0-9]+", :pos), :record_blockcount)
+        
+        # Column 7 can be either thickstart (BED) or signalValue (narrowPeak)
+        # Both accept integers and floats
+        col7 = onexit!(onenter!(re"[-+]?[0-9]+\.?[0-9]*([eE][-+]?[0-9]+)?", :pos), :record_col7)
+        
+        # Column 8 can be either thickend (BED) or pValue (narrowPeak)
+        col8 = onexit!(onenter!(re"[-+]?[0-9]+\.?[0-9]*([eE][-+]?[0-9]+)?", :pos), :record_col8)
+        
+        # Column 9 can be either itemrgb (BED) or qValue (narrowPeak)
+        # itemrgb: single int or triplet like "255,127,36"
+        # qValue: float
+        col9 = onexit!(onenter!(re"[-+]?[0-9]+\.?[0-9]*([eE][-+]?[0-9]+)?(,[0-9]+,[0-9]+)?", :pos), :record_col9)
+        
+        # Column 10 can be either blockcount (BED) or peak (narrowPeak)
+        col10 = onexit!(onenter!(re"[0-9]+", :pos), :record_col10)
 
-        # comma-separated values
+        # comma-separated values for BED columns 11-12
         csv(x) = cat(rep(cat(x, ',')), opt(x))
 
         blocksizes = csv(onexit!(onenter!(re"[0-9]+", :pos), :record_blocksizes_blocksize))
@@ -116,10 +126,10 @@ const record_machine, file_machine = let
             opt(cat('\t', name,
             opt(cat('\t', score,
             opt(cat('\t', strand,
-            opt(cat('\t', thickstart,
-            opt(cat('\t', thickend,
-            opt(cat('\t', itemrgb,
-            opt(cat('\t', blockcount,
+            opt(cat('\t', col7,
+            opt(cat('\t', col8,
+            opt(cat('\t', col9,
+            opt(cat('\t', col10,
             opt(cat('\t', blocksizes,
             opt(cat('\t', blockstarts)))))))))))))))))))
     end
@@ -154,10 +164,14 @@ const record_actions = Dict(
     :record_name => :(record.name = (pos:@relpos(p-1)); record.ncols += 1),
     :record_score => :(record.score = (pos:@relpos(p-1)); record.ncols += 1),
     :record_strand => :(record.strand = @relpos(p); record.ncols += 1),
-    :record_thickstart => :(record.thickstart = (pos:@relpos(p-1)); record.ncols += 1),
-    :record_thickend => :(record.thickend = (pos:@relpos(p-1)); record.ncols += 1),
-    :record_itemrgb => :(record.itemrgb = (pos:@relpos(p-1)); record.ncols += 1),
-    :record_blockcount => :(record.blockcount = (pos:@relpos(p-1)); record.ncols += 1),
+    # Column 7: thickstart (BED) or signalValue (narrowPeak)
+    :record_col7 => :(record.thickstart = (pos:@relpos(p-1)); record.signalvalue = (pos:@relpos(p-1)); record.ncols += 1),
+    # Column 8: thickend (BED) or pValue (narrowPeak)
+    :record_col8 => :(record.thickend = (pos:@relpos(p-1)); record.pvalue = (pos:@relpos(p-1)); record.ncols += 1),
+    # Column 9: itemrgb (BED) or qValue (narrowPeak)
+    :record_col9 => :(record.itemrgb = (pos:@relpos(p-1)); record.qvalue = (pos:@relpos(p-1)); record.ncols += 1),
+    # Column 10: blockcount (BED) or peak (narrowPeak)
+    :record_col10 => :(record.blockcount = (pos:@relpos(p-1)); record.peak = (pos:@relpos(p-1)); record.ncols += 1),
     :record_blocksizes_blocksize => :(push!(record.blocksizes, (pos:@relpos(p-1)))),
     :record_blocksizes => :(record.ncols += 1),
     :record_blockstarts_blockstart => :(push!(record.blockstarts, (pos:@relpos(p-1)))),
