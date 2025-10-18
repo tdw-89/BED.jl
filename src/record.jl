@@ -20,6 +20,11 @@ mutable struct Record
     blockcount::UnitRange{Int}
     blocksizes::Vector{UnitRange{Int}}
     blockstarts::Vector{UnitRange{Int}}
+    # narrowPeak fields
+    signalvalue::UnitRange{Int}
+    pvalue::UnitRange{Int}
+    qvalue::UnitRange{Int}
+    peak::UnitRange{Int}
 end
 
 """
@@ -35,7 +40,9 @@ function Record()
         # strand-itemrgb
         0, 1:0, 1:0, 1:0,
         # blockcount-blockstarts
-        1:0, UnitRange{Int}[], UnitRange{Int}[])
+        1:0, UnitRange{Int}[], UnitRange{Int}[],
+        # narrowPeak fields
+        1:0, 1:0, 1:0, 1:0)
 end
 
 """
@@ -58,7 +65,9 @@ function Base.convert(::Type{Record}, data::Vector{UInt8})
         # strand-itemrgb
         0, 1:0, 1:0, 1:0,
         # blockcount-blockstarts
-        1:0, UnitRange{Int}[], UnitRange{Int}[])
+        1:0, UnitRange{Int}[], UnitRange{Int}[],
+        # narrowPeak fields
+        1:0, 1:0, 1:0, 1:0)
     index!(record)
     return record
 end
@@ -93,6 +102,10 @@ function Base.empty!(record::Record)
     record.blockcount = 1:0
     empty!(record.blocksizes)
     empty!(record.blockstarts)
+    record.signalvalue = 1:0
+    record.pvalue = 1:0
+    record.qvalue = 1:0
+    record.peak = 1:0
     return record
 end
 
@@ -142,7 +155,11 @@ function Base.copy(record::Record)
         record.itemrgb,
         record.blockcount,
         copy(record.blocksizes),
-        copy(record.blockstarts))
+        copy(record.blockstarts),
+        record.signalvalue,
+        record.pvalue,
+        record.qvalue,
+        record.peak)
 end
 
 function Base.write(io::IO, record::Record)
@@ -189,9 +206,11 @@ function Base.show(io::IO, record::Record)
             bcount = blockcount(record)
             println(io)
             print(io, "  block count: ", bcount)
-            for (i, (bsize, bstart)) in enumerate(zip(blocksizes(record), blockstarts(record)))
-                println(io)
-                print(io, "      [$i]: size=$(bsize), start=$(bstart)")
+            if hasblocksizes(record) && hasblockstarts(record)
+                for (i, (bsize, bstart)) in enumerate(zip(blocksizes(record), blockstarts(record)))
+                    println(io)
+                    print(io, "      [$i]: size=$(bsize), start=$(bstart)")
+                end
             end
         end
     else
@@ -471,10 +490,82 @@ function hasblockstarts(record::Record)
     return record.ncols ≥ 12
 end
 
+"""
+    signalvalue(record::Record)::Float64
+
+Get the signal value (overall enrichment) of `record` in narrowPeak format.
+"""
+function signalvalue(record::Record)::Float64
+    checkfilled(record)
+    if !hassignalvalue(record)
+        missingerror(:signalvalue)
+    end
+    return unsafe_parse_float(record.data, record.signalvalue)
+end
+
+function hassignalvalue(record::Record)
+    return record.ncols ≥ 7
+end
+
+"""
+    pvalue(record::Record)::Float64
+
+Get the p-value (-log10) of `record` in narrowPeak format.
+"""
+function pvalue(record::Record)::Float64
+    checkfilled(record)
+    if !haspvalue(record)
+        missingerror(:pvalue)
+    end
+    return unsafe_parse_float(record.data, record.pvalue)
+end
+
+function haspvalue(record::Record)
+    return record.ncols ≥ 8
+end
+
+"""
+    qvalue(record::Record)::Float64
+
+Get the q-value (-log10) of `record` in narrowPeak format.
+"""
+function qvalue(record::Record)::Float64
+    checkfilled(record)
+    if !hasqvalue(record)
+        missingerror(:qvalue)
+    end
+    return unsafe_parse_float(record.data, record.qvalue)
+end
+
+function hasqvalue(record::Record)
+    return record.ncols ≥ 9
+end
+
+"""
+    peak(record::Record)::Int
+
+Get the peak position (0-based offset from chromStart) of `record` in narrowPeak format.
+"""
+function peak(record::Record)::Int
+    checkfilled(record)
+    if !haspeak(record)
+        missingerror(:peak)
+    end
+    return unsafe_parse_decimal(Int, record.data, record.peak)
+end
+
+function haspeak(record::Record)
+    return record.ncols ≥ 10
+end
+
 function checkfilled(record::Record)
     if !isfilled(record)
         throw(ArgumentError("unfilled BED record"))
     end
+end
+
+function missingerror(field::Symbol)
+    throw(ArgumentError("$(field) is not present"))
 end
 
 # r"[-+]?[0-9]+" must match `data[range]`.
@@ -495,6 +586,11 @@ function unsafe_parse_decimal(::Type{T}, data::Vector{UInt8}, range::UnitRange{I
         x = Base.Checked.checked_add(x, (data[i] - UInt8('0')) % T)
     end
     return sign * x
+end
+
+# Parse floating point number from data[range].
+function unsafe_parse_float(data::Vector{UInt8}, range::UnitRange{Int})
+    return parse(Float64, String(data[range]))
 end
 
 function memcmp(p1::Ptr, p2::Ptr, n::Integer)
