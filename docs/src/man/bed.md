@@ -73,3 +73,45 @@ for interval in eachoverlap(icol, Interval("chrX", 40001, 51500))
     # ...
 end
 ```
+
+## narrowPeak Format Support
+
+The BED package also supports the narrowPeak format, which is a specialized BED format used by peak-calling tools like MACS3. narrowPeak files contain 10 columns with the following structure:
+
+1. `chrom` - Chromosome name
+2. `chromStart` - Start position (0-based)
+3. `chromEnd` - End position (not included)
+4. `name` - Peak name
+5. `score` - Integer score (0-1000)
+6. `strand` - Strand (+, -, or .)
+7. `signalValue` - Measurement of overall enrichment (floating-point)
+8. `pValue` - Statistical significance as -log10(pValue) (floating-point)
+9. `qValue` - Statistical significance as -log10(qValue) using FDR (floating-point)
+10. `peak` - Point-source called for this peak; 0-based offset from chromStart (integer)
+
+narrowPeak files are automatically handled by the BED reader and provide additional accessor functions:
+
+```julia
+using BED
+
+# Open a narrowPeak file
+reader = open(BED.Reader, "peaks.narrowPeak")
+
+for record in reader
+    # Access standard BED fields
+    chrom = BED.chrom(record)
+    start = BED.chromstart(record)
+    peak_name = BED.name(record)
+    
+    # Access narrowPeak-specific fields
+    signal = BED.signalvalue(record)  # Overall enrichment
+    pval = BED.pvalue(record)         # -log10(p-value)
+    qval = BED.qvalue(record)         # -log10(q-value)
+    peak_offset = BED.peak(record)    # Offset from chromStart
+    
+    # Calculate absolute peak position
+    peak_pos = start + peak_offset
+end
+
+close(reader)
+```
