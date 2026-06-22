@@ -109,6 +109,10 @@ function Base.empty!(record::Record)
     return record
 end
 
+function GenomicFeatures.intervaltype(::Type{Record})
+    return GenomicFeatures.GenomicInterval{Record}
+end
+
 function GenomicFeatures.GenomicInterval(record::Record)
     name = BioGenerics.seqname(record)
     lpos = BioGenerics.leftposition(record)
@@ -241,6 +245,14 @@ function BioGenerics.seqname(record::Record)
 end
 
 function BioGenerics.hasseqname(record::Record)
+    return haschrom(record)
+end
+
+function GenomicFeatures.groupname(record::Record)
+    return chrom(record)
+end
+
+function GenomicFeatures.hasgroupname(record::Record)
     return haschrom(record)
 end
 
