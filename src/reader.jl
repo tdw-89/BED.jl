@@ -146,11 +146,18 @@ const record_machine, file_machine = let
         cat(opt('\r'), lf)
     end
 
-    file = rep(alt(
-        cat(record, newline),
-        cat(blankline, newline),
-        cat(comment, newline),
-    ))
+    # A file is a sequence of newline-terminated lines, optionally followed by
+    # a final line that lacks a trailing newline (i.e. terminated by EOF).
+    # Allowing this trailing line makes parsing robust to files that do not end
+    # with a blank/newline (e.g. many narrowPeak files).
+    file = cat(
+        rep(alt(
+            cat(record, newline),
+            cat(blankline, newline),
+            cat(comment, newline),
+        )),
+        opt(alt(record, comment, blankline)),
+    )
 
     map(Automa.compile, (record, file))
 end

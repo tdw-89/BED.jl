@@ -1,7 +1,6 @@
 using Test
 using BED
 
-
 using Distributions
 using Documenter
 using FormatSpecimens
@@ -363,5 +362,4 @@ end
     # Include doctests.
     DocMeta.setdocmeta!(BED, :DocTestSetup, :(using BED); recursive=true)
     doctest(BED; manual = false)
-
 end
